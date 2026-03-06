@@ -19,7 +19,9 @@
       overflow: hidden;
       font-family: "Microsoft YaHei", sans-serif;
       background: linear-gradient(160deg, var(--bg1), var(--bg2));
-      background-image: linear-gradient(160deg, rgba(248,246,239,.72), rgba(239,231,215,.72)), url("assets/背景.jpg");
+      background-image:
+        linear-gradient(160deg, rgba(0,0,0,.24), rgba(0,0,0,.18)),
+        url("assets/背景.jpg");
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -36,16 +38,19 @@
     .hud {
       width: min(92vw, 420px);
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
       font-size: 14px;
       user-select: none;
+      gap: 12px;
     }
     .next-box {
       display: flex;
       align-items: center;
       gap: 8px;
       font-weight: 700;
+      color: #fff8dc;
+      text-shadow: 0 1px 4px rgba(0,0,0,.5);
     }
     #nextPreview {
       width: 34px;
@@ -85,7 +90,6 @@
     #game {
       width: min(92vw, 420px);
       height: min(80vh, 680px);
-      overflow: visible;
       border: 3px solid var(--line);
       border-radius: 14px;
       background: var(--board);
@@ -95,7 +99,9 @@
     }
     .tips {
       font-size: 12px;
-      opacity: .8;
+      opacity: .92;
+      color: #fff8dc;
+      text-shadow: 0 1px 4px rgba(0,0,0,.45);
       user-select: none;
       text-align: center;
       line-height: 1.35;
@@ -114,7 +120,6 @@
 <body>
   <div class="wrap">
     <div class="hud">
-      
       <div class="next-box">下一个 <canvas id="nextPreview" width="68" height="68"></canvas></div>
       <button id="restart">重开</button>
     </div>
@@ -122,7 +127,7 @@
       <canvas id="game" width="420" height="680"></canvas>
       <div class="score-hud" id="score">0</div>
     </div>
-    <div class="tips">已启用 <code>assets/1.png ~ assets/9.png</code> 和页面背景 <code>assets/背景.jpg</code>。</div>
+    <div class="tips">已启用 <code>assets/1.png ~ assets/9.png</code> 与页面背景 <code>assets/背景.jpg</code>。</div>
   </div>
 
   <script>
@@ -155,8 +160,7 @@
     const SLEEP_FRAMES = 22;
     const MAX_BALLS = 96;
 
-    // 使用指数增长半径：更大的初始球 + 更明显的等级差距。
-    // 在 420 宽画布中，末级半径约 160（直径约 320），约占屏宽 76%。
+    // 指数增长半径（末级约占画布宽度 76%）
     const BASE_RADIUS = 36;
     const RADIUS_GROWTH = 1.157;
     const SPRITE_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1];
@@ -192,9 +196,9 @@
       score = nextScore;
       scoreEl.textContent = score;
       if (animate) {
-        scoreEl.classList.remove("pop");
+        scoreEl.classList.remove('pop');
         void scoreEl.offsetWidth;
-        scoreEl.classList.add("pop");
+        scoreEl.classList.add('pop');
       }
     }
 
@@ -210,7 +214,7 @@
       const id = g.getImageData(0, 0, cw, ch);
       const d = id.data;
 
-      // 按四角背景色抠图，兼容纯白和浅灰底
+      // 四角采样背景色；仅对“接近背景且偏亮”的像素做透明处理，避免主体褪色。
       const p00 = 0;
       const p10 = (cw - 1) * 4;
       const p01 = ((ch - 1) * cw) * 4;
@@ -225,18 +229,20 @@
         const dg = gg - bgG;
         const db = b - bgB;
         const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        const light = (r + gg + b) / 3;
 
-        if (dist < 24) {
+        if (dist < 18 && light > 220) {
           d[i + 3] = 0;
-        } else if (dist < 46) {
-          // 靠近背景色的像素做羽化，避免锯齿白边
-          const keep = (dist - 24) / 22;
-          d[i + 3] = (d[i + 3] * (keep < 0 ? 0 : keep)) | 0;
+        } else if (dist < 30 && light > 210) {
+          const keep = (dist - 18) / 12;
+          d[i + 3] = (255 * (keep < 0 ? 0 : keep)) | 0;
+        } else {
+          // 主体像素强制不透明，避免看起来“褪色”
+          d[i + 3] = 255;
         }
       }
       g.putImageData(id, 0, 0);
 
-      // 裁掉透明边缘
       let minX = cw, minY = ch, maxX = -1, maxY = -1;
       for (let y = 0; y < ch; y++) {
         for (let x = 0; x < cw; x++) {
@@ -276,7 +282,6 @@
         left--;
         if (left === 0) {
           spritesReady = true;
-          // 之前可能缓存了回退圆球，加载完贴图后强制重建
           for (let i = 0; i < typeSpriteCache.length; i++) typeSpriteCache[i] = null;
           renderNextPreview();
         }
@@ -289,7 +294,6 @@
           try {
             baseSprites[i] = removeWhiteBgToCanvas(img);
           } catch (_) {
-            // 个别浏览器在本地 file:// 下可能限制像素读取，回退为原图
             const raw = document.createElement('canvas');
             raw.width = img.naturalWidth || img.width;
             raw.height = img.naturalHeight || img.height;
@@ -299,7 +303,6 @@
           doneOne();
         };
         img.onerror = () => {
-          // 读图失败时保留空位，绘制会自动回退到纯色球
           baseSprites[i] = null;
           doneOne();
         };
@@ -320,11 +323,14 @@
       c.height = size;
       const g = c.getContext('2d');
 
+      // 确保贴图缓存本身完全不透明绘制
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+
       const base = baseSprites[spriteId];
       if (spritesReady && base) {
-        g.drawImage(base, 0, 0, base.width, base.height, 2, 2, size - 4, size - 4);
+        g.drawImage(base, 0, 0, base.width, base.height, 0, 0, size, size);
       } else {
-        // 回退渲染
         g.fillStyle = '#fff6df';
         g.strokeStyle = '#33281f';
         g.lineWidth = 3;
@@ -344,17 +350,18 @@
       const sp = getHeadSprite(nextType);
       const w = nextPreview.width;
       const h = nextPreview.height;
+      npCtx.globalAlpha = 1;
+      npCtx.globalCompositeOperation = 'source-over';
       npCtx.drawImage(sp.img, (w - sp.img.width) * 0.5, (h - sp.img.height) * 0.5);
     }
 
     function resetGame() {
       ballCount = 0;
-      score = 0;
+      setScore(0, false);
       gameOver = false;
       canDrop = true;
       lastDropAt = 0;
       nextType = randNext();
-      setScore(0, false);
       renderNextPreview();
     }
 
@@ -367,6 +374,8 @@
         vy: 0,
         a: 0,
         av: 0,
+        sleep: 0,
+        sleepFrames: 0,
         r: t[0],
         type,
         mergedAt: -99,
@@ -549,6 +558,11 @@
       ctx.lineWidth = WALL;
       ctx.strokeRect(WALL * 0.5, WALL * 0.5, W - WALL, H - WALL);
 
+      // 明确还原渲染状态，避免贴图被意外混合/滤镜/透明影响
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.filter = 'none';
+
       for (let i = 0; i < ballCount; i++) {
         const b = balls[i];
         const sp = getHeadSprite(b.type);
@@ -556,6 +570,8 @@
         ctx.translate(b.x, b.y);
         ctx.rotate(b.a);
         ctx.drawImage(sp.img, -sp.half, -sp.half);
+
+
         ctx.restore();
       }
 
@@ -616,32 +632,4 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
